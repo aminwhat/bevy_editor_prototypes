@@ -6,6 +6,11 @@ edition = "2024"
 [dependencies]
 bevy.workspace = true
 bevy_editor_styles.workspace = true
+cocoa = "0.26.1"
+objc-rs = "0.2.8"
+objc2 = "0.6.2"
+objc2-app-kit = "0.3.1"
+objc2-foundation = "0.3.1"
 
 [lints]
 workspace = true
