@@ -4,10 +4,10 @@
 //! such as "File", "Edit", "View", etc.
 
 use bevy::{asset::embedded_asset, prelude::*};
+use bevy_editor_styles::Theme;
+
 #[cfg(target_os = "macos")]
 use objc2::MainThreadMarker;
-
-use bevy_editor_styles::Theme;
 
 /// The root node for the menu bar.
 #[derive(Component)]
@@ -23,7 +23,7 @@ impl Plugin for MenuBarPlugin {
         #[cfg(target_os = "macos")]
         {
             app.insert_non_send_resource(MainThreadMarker::new().unwrap());
-            app.add_systems(PostStartup, setup_native_macos_menu);
+            app.add_systems(Startup, setup_native_macos_menu);
         }
 
         #[cfg(not(target_os = "macos"))]
