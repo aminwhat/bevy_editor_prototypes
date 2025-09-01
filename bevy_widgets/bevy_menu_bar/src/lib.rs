@@ -4,6 +4,8 @@
 //! such as "File", "Edit", "View", etc.
 
 use bevy::{asset::embedded_asset, prelude::*};
+#[cfg(target_os = "macos")]
+use objc2::MainThreadMarker;
 
 use bevy_editor_styles::Theme;
 
@@ -20,8 +22,8 @@ impl Plugin for MenuBarPlugin {
 
         #[cfg(target_os = "macos")]
         {
-            println!("Spawning the MacOs Menu Bar Native");
-            app.add_systems(Startup, setup_native_macos_menu);
+            app.insert_non_send_resource(MainThreadMarker::new().unwrap());
+            app.add_systems(PostStartup, setup_native_macos_menu);
         }
 
         #[cfg(not(target_os = "macos"))]
@@ -340,101 +342,107 @@ fn menu_setup(
 /// The setup system for the menu bar (macOS native).
 #[allow(unsafe_code)]
 #[cfg(target_os = "macos")]
-fn setup_native_macos_menu() {
+fn setup_native_macos_menu(_marker: NonSend<MainThreadMarker>) {
     use objc2::sel;
-    use objc2::{
-        MainThreadMarker,
-        rc::{Retained, autoreleasepool},
-    };
     use objc2_app_kit::{NSApp, NSMenu, NSMenuItem};
     use objc2_foundation::NSString;
 
     unsafe {
-        autoreleasepool(|pool| {
-            let main_thread = MainThreadMarker::new_unchecked();
+        let main_thread =
+            MainThreadMarker::new().expect("setup_native_macos_menu must run on the main thread");
 
-            let app = NSApp(main_thread);
+        let app = NSApp(main_thread);
 
-            // Main menu bar
-            let menubar = Retained::<NSMenu>::autorelease(NSMenu::new(main_thread), pool);
+        // Ensure the app is activated so menus are visible
+        app.activate();
 
-            // === File menu ===
-            let file_menu_item =
-                Retained::<NSMenuItem>::autorelease(NSMenuItem::new(main_thread), pool);
-            menubar.addItem(&file_menu_item);
+        // Main menu bar
+        let menubar = NSMenu::new(main_thread);
 
-            let file_menu = Retained::<NSMenu>::autorelease(NSMenu::new(main_thread), pool);
-            file_menu.setTitle(NSString::from_str("File").as_ref());
-            file_menu.addItemWithTitle_action_keyEquivalent(
-                NSString::from_str("Quit").as_ref(),
-                sel!(terminate:).into(),
-                NSString::from_str("q").as_ref(),
-            );
-            file_menu_item.setSubmenu(Some(&file_menu));
+        // === App Menu ===
+        let app_menu_item = NSMenuItem::new(main_thread);
+        menubar.addItem(&app_menu_item);
 
-            // === Edit menu ===
-            let edit_menu_item =
-                Retained::<NSMenuItem>::autorelease(NSMenuItem::new(main_thread), pool);
-            menubar.addItem(&edit_menu_item);
+        let app_menu = NSMenu::new(main_thread);
+        app_menu.setTitle(NSString::from_str("App").as_ref());
+        app_menu.addItemWithTitle_action_keyEquivalent(
+            NSString::from_str("Quit").as_ref(),
+            sel!(terminate:).into(),
+            NSString::from_str("q").as_ref(),
+        );
+        app_menu_item.setSubmenu(Some(&app_menu));
 
-            let edit_menu = Retained::<NSMenu>::autorelease(NSMenu::new(main_thread), pool);
-            edit_menu.setTitle(NSString::from_str("Edit").as_ref());
-            edit_menu.addItemWithTitle_action_keyEquivalent(
-                NSString::from_str("Undo").as_ref(),
-                sel!(undo:).into(),
-                NSString::from_str("z").as_ref(),
-            );
-            edit_menu.addItemWithTitle_action_keyEquivalent(
-                NSString::from_str("Redo").as_ref(),
-                sel!(redo:).into(),
-                NSString::from_str("Z").as_ref(),
-            );
-            edit_menu_item.setSubmenu(Some(&edit_menu));
+        // === File menu ===
+        let file_menu_item = NSMenuItem::new(main_thread);
+        menubar.addItem(&file_menu_item);
 
-            // === Build menu ===
-            let build_menu_item =
-                Retained::<NSMenuItem>::autorelease(NSMenuItem::new(main_thread), pool);
-            menubar.addItem(&build_menu_item);
+        let file_menu = NSMenu::new(main_thread);
+        file_menu.setTitle(NSString::from_str("File").as_ref());
+        file_menu.addItemWithTitle_action_keyEquivalent(
+            NSString::from_str("Save").as_ref(),
+            None,
+            NSString::from_str("s").as_ref(),
+        );
+        file_menu_item.setSubmenu(Some(&file_menu));
 
-            let build_menu = Retained::<NSMenu>::autorelease(NSMenu::new(main_thread), pool);
-            build_menu.setTitle(NSString::from_str("Build").as_ref());
-            build_menu.addItemWithTitle_action_keyEquivalent(
-                NSString::from_str("Run").as_ref(),
-                None, // no action yet
-                NSString::from_str("r").as_ref(),
-            );
-            build_menu_item.setSubmenu(Some(&build_menu));
+        // === Edit menu ===
+        let edit_menu_item = NSMenuItem::new(main_thread);
+        menubar.addItem(&edit_menu_item);
 
-            // === Window menu ===
-            let window_menu_item =
-                Retained::<NSMenuItem>::autorelease(NSMenuItem::new(main_thread), pool);
-            menubar.addItem(&window_menu_item);
+        let edit_menu = NSMenu::new(main_thread);
+        edit_menu.setTitle(NSString::from_str("Edit").as_ref());
+        edit_menu.addItemWithTitle_action_keyEquivalent(
+            NSString::from_str("Undo").as_ref(),
+            sel!(undo:).into(),
+            NSString::from_str("z").as_ref(),
+        );
+        edit_menu.addItemWithTitle_action_keyEquivalent(
+            NSString::from_str("Redo").as_ref(),
+            sel!(redo:).into(),
+            NSString::from_str("Z").as_ref(),
+        );
+        edit_menu_item.setSubmenu(Some(&edit_menu));
 
-            let window_menu = Retained::<NSMenu>::autorelease(NSMenu::new(main_thread), pool);
-            window_menu.setTitle(NSString::from_str("Window").as_ref());
-            window_menu.addItemWithTitle_action_keyEquivalent(
-                NSString::from_str("Minimize").as_ref(),
-                sel!(performMiniaturize:).into(),
-                NSString::from_str("m").as_ref(),
-            );
-            window_menu_item.setSubmenu(Some(&window_menu));
+        // === Build menu ===
+        let build_menu_item = NSMenuItem::new(main_thread);
+        menubar.addItem(&build_menu_item);
 
-            // === Help menu ===
-            let help_menu_item =
-                Retained::<NSMenuItem>::autorelease(NSMenuItem::new(main_thread), pool);
-            menubar.addItem(&help_menu_item);
+        let build_menu = NSMenu::new(main_thread);
+        build_menu.setTitle(NSString::from_str("Build").as_ref());
+        build_menu.addItemWithTitle_action_keyEquivalent(
+            NSString::from_str("Run").as_ref(),
+            None, // no action yet
+            NSString::from_str("r").as_ref(),
+        );
+        build_menu_item.setSubmenu(Some(&build_menu));
 
-            let help_menu = Retained::<NSMenu>::autorelease(NSMenu::new(main_thread), pool);
-            help_menu.setTitle(NSString::from_str("Help").as_ref());
-            help_menu.addItemWithTitle_action_keyEquivalent(
-                NSString::from_str("About").as_ref(),
-                None,
-                NSString::new().as_ref(),
-            );
-            help_menu_item.setSubmenu(Some(&help_menu));
+        // === Window menu ===
+        let window_menu_item = NSMenuItem::new(main_thread);
+        menubar.addItem(&window_menu_item);
 
-            // Attach to app
-            app.setMainMenu(Some(&menubar));
-        });
+        let window_menu = NSMenu::new(main_thread);
+        window_menu.setTitle(NSString::from_str("Window").as_ref());
+        window_menu.addItemWithTitle_action_keyEquivalent(
+            NSString::from_str("Minimize").as_ref(),
+            sel!(performMiniaturize:).into(),
+            NSString::from_str("m").as_ref(),
+        );
+        window_menu_item.setSubmenu(Some(&window_menu));
+
+        // === Help menu ===
+        let help_menu_item = NSMenuItem::new(main_thread);
+        menubar.addItem(&help_menu_item);
+
+        let help_menu = NSMenu::new(main_thread);
+        help_menu.setTitle(NSString::from_str("Help").as_ref());
+        help_menu.addItemWithTitle_action_keyEquivalent(
+            NSString::from_str("About").as_ref(),
+            None,
+            NSString::new().as_ref(),
+        );
+        help_menu_item.setSubmenu(Some(&help_menu));
+
+        // Attach to app
+        app.setMainMenu(Some(&menubar));
     }
 }
